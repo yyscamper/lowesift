@@ -36,11 +36,14 @@ public:
 	IplImage* Process();
 	void SetParam(SiftParam_t& param);
 private:
-	void InitImage();
-	bool BuildDogPyr();
-	void FindExtremePoint();
-	bool IsExtrema(int octave, int scale, int x, int y);
-	void DebugInfo();
+	void	InitImage();
+	bool	BuildDogPyr();
+	void	FindExtremePoint();
+	bool	IsExtrema(const int octave, const int scale, const int x, const int y) const;
+	void	ContrastRemoval();
+	void	EdgeRemoval();
+	void	GetGradMagOri(const IplImage* img, const int x, const int y, double* mag, double* ori) const;
+	void	DebugInfo();
 private:
 	IplImage* m_baseImage;
 	IplImage*** m_dogPyr;

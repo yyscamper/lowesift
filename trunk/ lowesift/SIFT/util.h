@@ -4,8 +4,8 @@
 
 #include "cv.h"
 
-inline float GetVal32f(IplImage* img, int x, int y);
-inline void Setval32f(IplImage* img, int x, int y, float val);
-inline unsigned char GetVal8(IplImage* img, int x, int y);
-inline void Setval32f(IplImage* img, int x, int y, unsigned char val);
+ float GetVal32f(IplImage* img, int x, int y);
+ void Setval32f(IplImage* img, int x, int y, float val);
+ unsigned char GetVal8(IplImage* img, int x, int y);
+ void Setval32f(IplImage* img, int x, int y, unsigned char val);
 #endif
