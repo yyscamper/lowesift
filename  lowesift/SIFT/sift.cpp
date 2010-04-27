@@ -120,6 +120,7 @@ void SiftToolbox::FindExtremePoint()
 		}
 	}
 }
+
 bool SiftToolbox::IsExtrema(int octave, int scale, int x, int y)
 {
 	float val = GetVal32f(m_dogPyr[octave][scale], x, y);
@@ -148,4 +149,14 @@ bool SiftToolbox::IsExtrema(int octave, int scale, int x, int y)
 		return false;
 	}
 	return true;
+}
+
+void SiftToolbox::ContrastRemoval()
+{
+	
+}
+
+void SiftToolbox::EdgeRemoval()
+{
+
 }
