@@ -25,6 +25,7 @@ typedef struct{
 	double	sigmaOfPriorDouble;
 	double	sigmaOfInitGaussPyr;
 	double	thresholdOfKeypointContrast;
+	double	ratioOfEdge;
 }SiftParam_t;
 
 class SiftToolbox
@@ -40,8 +41,8 @@ private:
 	bool	BuildDogPyr();
 	void	FindExtremePoint();
 	bool	IsExtrema(const int octave, const int scale, const int x, const int y) const;
-	void	ContrastRemoval();
-	void	EdgeRemoval();
+	bool	IsRemovableForLowContrast(IplImage* img, int row, int col) const;
+	bool	IsRemovableForEdge(IplImage* img, int row, int col) const;
 	void	GetGradMagOri(const IplImage* img, const int x, const int y, double* mag, double* ori) const;
 	void	DebugInfo();
 private:

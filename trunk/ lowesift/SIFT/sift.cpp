@@ -121,7 +121,7 @@ void SiftToolbox::FindExtremePoint()
 	}
 }
 
-bool SiftToolbox::IsExtrema(int octave, int scale, int x, int y)
+bool SiftToolbox::IsExtrema(const int octave, const int scale, const int x, const int y) const 
 {
 	float val = GetVal32f(m_dogPyr[octave][scale], x, y);
 	float val1 = GetVal32f(m_dogPyr[octave][scale], x-1, y);
@@ -151,12 +151,22 @@ bool SiftToolbox::IsExtrema(int octave, int scale, int x, int y)
 	return true;
 }
 
-void SiftToolbox::ContrastRemoval()
+
+bool SiftToolbox::IsRemovableForLowContrast(IplImage* img, int row, int col) const
 {
-	
+	return false;
 }
 
-void SiftToolbox::EdgeRemoval()
+bool SiftToolbox::IsRemovableForEdge(IplImage* img, int row, int col) const
 {
-
+	double Dxx = GetVal32f(img, row, col+1) + GetVal32f(img, row, col-1) - 2*GetVal32f(img, row, col);
+	double Dyy = GetVal32f(img, row-1, col) + GetVal32f(img, row+1, col) - 2*GetVal32f(img, row, col);
+	double Dxy = (GetVal32f(img, row+1, col+1) + GetVal32f(img, row-1, col-1)
+					- GetVal32f(img, row+1, col-1) - GetVal32f(img, row-1, col+1))/4.0;
+	double trace = Dxx + Dyy;
+	double det = Dxx*Dyy - Dxy*Dxy;
+	if(det <= 0 || trace*trace/det >= pow(m_param.ratioOfEdge+1,2)/m_param.ratioOfEdge){
+		return true;
+	}
+	return false;	
 }
