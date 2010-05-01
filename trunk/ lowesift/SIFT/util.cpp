@@ -1,7 +1,7 @@
 
 #include "util.h"
 
- float GetVal32f(IplImage* img, int x, int y)
+ float GetVal32f(const IplImage* img, int x, int y)
 {
 	return ((float*)(img->imageData + img->widthStep*x))[y];
 }
@@ -11,7 +11,7 @@
 	((float*)(img->imageData + img->widthStep*x))[y] = val;
 }
 
- unsigned char GetVal8(IplImage* img, int x, int y)
+ unsigned char GetVal8(const IplImage* img, int x, int y)
 {
 	return ((unsigned char*)(img->imageData + img->widthStep*x))[y];
 }
