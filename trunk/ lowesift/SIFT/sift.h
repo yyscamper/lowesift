@@ -34,7 +34,16 @@ typedef struct{
 	int		radiusOfOriHistWnd; // 3*sigmaOfOriAssign
 	int		numOfHistBins; //36
 	double	nearMaxRatio; //80%
+	int		maxNumOfInterp;
+	int		numOfMarginPixel;
 }SiftParam_t;
+
+enum Sift__Plot_Type{
+	SIFT_PLOT_DOT = 0,
+	SIFT_PLOT_LINE = 1,
+	SIFT_PLOT_RECT = 2,
+	SIFT_PLOT_ECLLIPSE = 3
+};
 
 class SiftToolbox
 {
@@ -43,7 +52,7 @@ public:
 	~SiftToolbox();
 	IplImage* Process(IplImage* image);
 	void SetParam(SiftParam_t& param);
-	IplImage* PlotKeypoint();
+	IplImage* PlotKeypoint(int type = SIFT_PLOT_ECLLIPSE);
 private:
 	void	InitImage();
 	bool	BuildDogPyr();

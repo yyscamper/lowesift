@@ -10,7 +10,7 @@ SiftToolbox::SiftToolbox()
 {
 	m_param.numOfOctave = 0;
 	m_param.topPyrSize = 16;
-	m_param.isPriorDouble = false;
+	m_param.isPriorDouble = true;
 	m_param.nearMaxRatio = 0.8;
 	m_param.numOfHistBins = 36;
 	m_param.numOfScalePerOctave = 3;
@@ -20,11 +20,14 @@ SiftToolbox::SiftToolbox()
 	m_param.ratioOfEdge = 10;
 	m_param.radiusOfOriHistWnd = cvRound(m_param.sigmaOfOriAssign * 3);
 	m_param.thresholdOfKeypointContrast = 0.03;
+	m_param.numOfMarginPixel = 5;
+	m_param.maxNumOfInterp = 4;
 
 	m_dogPyr = NULL;
 	m_pSigmaVal = NULL;
 	m_pyrBaseImage = NULL;
 	m_maxMag = 0.0;
+
 }
 
 SiftToolbox::~SiftToolbox()
@@ -95,22 +98,33 @@ bool SiftToolbox::BuildDogPyr()
 	m_pSigmaVal = (double*)calloc(dogScaleNum, sizeof(double));
 	assert(m_pSigmaVal != NULL);
 
-	gaussPyr[0][0] = cvCloneImage(m_pyrBaseImage);
-	for(int octave = 1; octave < m_param.numOfOctave; octave++){
-		gaussPyr[octave][0] = cvCreateImage(cvSize(gaussPyr[octave-1][0]->width/2, gaussPyr[octave-1][0]->height/2),
-			gaussPyr[octave-1][0]->depth, gaussPyr[octave-1][0]->nChannels);
-		cvResize(gaussPyr[octave-1][0], gaussPyr[octave][0], CV_INTER_LINEAR);
-	}
-	
 	double k = pow(2.0, 1.0/m_param.numOfScalePerOctave);
 	m_pSigmaVal[0] = m_param.sigmaOfInitGaussPyr;
 	for(int i=1; i<dogScaleNum; i++){
 		m_pSigmaVal[i] = m_pSigmaVal[i-1]*k;
 	}
+	gaussPyr[0][0] = cvCreateImage(cvGetSize(m_pyrBaseImage), m_pyrBaseImage->depth, m_pyrBaseImage->nChannels);
+	gaussPyr[0][0] = cvCloneImage(m_pyrBaseImage);
 	for(int octave = 0; octave < m_param.numOfOctave; octave++){
-		CvSize currOctaveSize = cvGetSize(gaussPyr[octave][0]);
-		for(int scale = 1; scale < gaussScaleNum; scale++){
+		CvSize currOctaveSize;
+		if(octave == 0){
+			currOctaveSize = cvGetSize(gaussPyr[0][0]);
+		}else{
+			currOctaveSize = cvSize(gaussPyr[octave-1][0]->width/2, gaussPyr[octave-1][0]->height/2);
+		}
+
+		for(int scale = 0; scale < gaussScaleNum; scale++){
+			if(scale ==0 && octave == 0){
+				continue;
+			}
 			gaussPyr[octave][scale] = cvCreateImage(currOctaveSize, IPL_DEPTH_32F, 1);
+			if(scale == 0 && octave != 0){ //down sample the previous octave image
+				gaussPyr[octave][0] = cvCreateImage(currOctaveSize,
+					gaussPyr[octave-1][0]->depth, gaussPyr[octave-1][0]->nChannels);
+				cvResize(gaussPyr[octave-1][m_param.numOfScalePerOctave], gaussPyr[octave][0], CV_INTER_LINEAR);
+				continue;
+			}
+
 			gaussPyr[octave][scale] = cvCloneImage(gaussPyr[octave][0]);
 			cvSmooth(gaussPyr[octave][scale], gaussPyr[octave][scale], 
 				CV_GAUSSIAN, 0, 0, m_pSigmaVal[scale-1], m_pSigmaVal[scale-1]);
@@ -142,8 +156,8 @@ void SiftToolbox::FindExtremePoint()
 	for(int i=0; i<m_param.numOfOctave; i++){
 		for(int j=1; j<m_param.numOfScalePerOctave+1; j++){
 			CvSize scaleSize = cvGetSize(m_dogPyr[i][j]);
-			for(int x = 4; x < (scaleSize.width-4); x++){
-				for(int y = 4; y< (scaleSize.height-4); y++){
+			for(int x = 4; x < (scaleSize.width - m_param.numOfMarginPixel); x++){
+				for(int y = 4; y< (scaleSize.height- m_param.numOfMarginPixel); y++){
 					//printf("\nOctave = %d, Scale = %d, x = %d, y = %d. ", i, j, x, y);
 					if(IsExtrema(i,j,x,y) 
 						&& !IsRemovableForLowContrast(i,j, x, y)
@@ -242,34 +256,54 @@ CvMat* SiftToolbox::GetDrivate_2(int octave, int scale, int x, int y) const
 
 bool SiftToolbox::IsRemovableForLowContrast(int octave, int scale, int x, int y) const
 {
-	double Dx;
+	//printf("\nOct: %d, Scale: %d, x: %d, y: %d", octave, scale, x, y);
 	CvMat* D1 = GetDrivate_1(octave, scale, x, y);
 	CvMat* D2 = GetDrivate_2(octave, scale, x, y);
 	CvMat* invD2 = cvCreateMat(3, 3, CV_32FC1);
-	cvInvert(D2, invD2, CV_SVD);
 	CvMat* X = cvCreateMat(3, 1, CV_32FC1);
-	cvMul(invD2, D1, X, -1.0);
-	int Xx = cvRound(cvmGet(X, 0, 0));
-	int Xy = cvRound(cvmGet(X, 1, 0));
-	int Xs = cvRound(cvmGet(X, 2, 0));
+	int loopCnt = 0, Xx, Xy, Xs;
+	for(; loopCnt < m_param.maxNumOfInterp; loopCnt++){
+		//Find the extream position
+		D1 = GetDrivate_1(octave, scale, x, y);
+		D2 = GetDrivate_2(octave, scale, x, y);
+		cvInvert(D2, invD2, CV_SVD);
+		cvGEMM(invD2, D1, -1.0, NULL, 0, X, 0);
+
+		Xx = cvRound(cvmGet(X, 0, 0));
+		Xy = cvRound(cvmGet(X, 1, 0));
+		Xs = cvRound(cvmGet(X, 2, 0));
+
+		if(abs(Xx) < 0.5 && abs(Xy) < 0.5 && abs(Xs) < 0.5){
+			break;
+		}
+		x += cvRound(Xx);
+		y += cvRound(Xy);
+		scale += cvRound(Xs);
+
+		if(x < m_param.numOfMarginPixel || y < m_param.numOfMarginPixel || scale < 1 
+			|| scale >= m_param.numOfScalePerOctave + 1
+			|| x >= m_dogPyr[octave][scale]->width - m_param.numOfMarginPixel 
+			|| y >= m_dogPyr[octave][scale]->height - m_param.numOfMarginPixel){
+				return true;
+		}
+	}
+	if(loopCnt >= m_param.maxNumOfInterp){
+		return true;
+	}
 
 	CvMat* temp = cvCreateMat(1, 1, CV_32FC1);
-	CvMat* tran = cvCreateMat(1, 3, CV_32FC1);
-	cvTranspose(D1, tran);
-	cvMul(tran, X, temp);
-	Dx = GetVal32f(m_dogPyr[octave][Xs],Xx,Xy) + cvmGet(temp, 0, 0);
-
-	cvTranspose(X, tran);
-	cvMul(D2, X, X, 1);
-	cvMul(tran, X, temp, 0.5);
-	Dx += cvmGet(temp, 0, 0);
+	cvGEMM(D1, X, 0.5, NULL, 0, temp, CV_GEMM_A_T);
+	double Dx = cvmGet(temp, 0, 0) + GetVal32f(m_dogPyr[octave][scale], x, y);
+	//cvGEMM(D2, X, 0.5, NULL, 0, temp1, 0);
+	//cvGEMM(D1, X, 1.0, NULL, 0, temp2, CV_GEMM_A_T);
+	//cvGEMM(X, temp1, 1.0, temp2, 1.0, temp3, CV_GEMM_A_T);
+	//Dx += cvmGet(temp3, 0, 0);
 
 	cvReleaseMat(&D1);
 	cvReleaseMat(&D2);
 	cvReleaseMat(&invD2);
 	cvReleaseMat(&X);
 	cvReleaseMat(&temp);
-	cvReleaseMat(&tran);
 
 	if(abs(Dx) <= m_param.thresholdOfKeypointContrast){
 		return true;
@@ -371,7 +405,7 @@ void SiftToolbox::GetGradMagOri(const IplImage* img, const int x, const int y, d
 	*ori = atan2(Dyy, Dxx) + CV_PI; //Change the radius range [0, 2*pi]
 }
 
-IplImage* SiftToolbox::PlotKeypoint()
+IplImage* SiftToolbox::PlotKeypoint(int type)
 {
 	IplImage* img = cvCreateImage(cvGetSize(m_pyrBaseImage), m_pyrBaseImage->depth, m_pyrBaseImage->nChannels);
 	img = cvCloneImage(m_originImage);
@@ -388,10 +422,25 @@ IplImage* SiftToolbox::PlotKeypoint()
 		startPoint.x = cvRound(pIter->pos.x * adjustVal);
 		startPoint.y = cvRound(pIter->pos.y * adjustVal);
 		axesLength = cvRound(pIter->mag * maxMagLen / m_maxMag);
-		cvEllipse(img, startPoint, cvSize(axesLength, axesLength/4), pIter->ori*360/2*CV_PI, 0, 360, CV_RGB(255,0,0), 1, 8, 0);
-		//endPoint.x = pIter->pos.x + cvRound(cos(pIter->ori)* pIter->mag * maxMagLen / m_maxMag);
-		//endPoint.y = pIter->pos.y + cvRound(sin(pIter->ori)* pIter->mag * maxMagLen / m_maxMag);
-		//cvLine(img, startPoint, endPoint, CV_RGB(255,0,0), 1, 8, 0);
+		switch (type)
+		{
+		case SIFT_PLOT_DOT:
+			maxMagLen = 10;
+			cvCircle(img, startPoint, cvRound(pIter->mag * maxMagLen / m_maxMag), CV_RGB(255, 0, 0), -1, 8, 0);
+			break;
+		case SIFT_PLOT_LINE:
+			CvPoint endPoint;
+			endPoint.x = pIter->pos.x + cvRound(cos(pIter->ori)* pIter->mag * maxMagLen / m_maxMag);
+			endPoint.y = pIter->pos.y + cvRound(sin(pIter->ori)* pIter->mag * maxMagLen / m_maxMag);
+			cvLine(img, startPoint, endPoint, CV_RGB(255,0,0), 1, 8, 0);
+			break;
+		case SIFT_PLOT_RECT:
+			maxMagLen = 10;
+			cvCircle(img, startPoint, cvRound(pIter->mag * maxMagLen / m_maxMag), CV_RGB(255, 0, 0), -1, 8, 0);
+			break;
+		default:
+			cvEllipse(img, startPoint, cvSize(axesLength, axesLength/4), pIter->ori*360/(2*CV_PI), 0, 360, CV_RGB(255,0,0), 1, 8, 0);
+		}
 	}
 	return img;
 }
