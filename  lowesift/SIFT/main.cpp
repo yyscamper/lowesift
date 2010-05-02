@@ -6,7 +6,7 @@ using namespace std;
 
 int main()
 {
-	char* path = "book1.jpg";
+	char* path = "book.jpg";
 	IplImage* img;
 	img = cvLoadImage(path, CV_LOAD_IMAGE_COLOR);
 	if(img == NULL){
