@@ -180,10 +180,6 @@
 				RelativePath=".\sift.cpp"
 				>
 			</File>
-			<File
-				RelativePath=".\util.cpp"
-				>
-			</File>
 		</Filter>
 		<Filter
 			Name="Í·ÎÄ¼þ"
@@ -196,10 +192,6 @@
 			</File>
 			<File
 				RelativePath=".\sift.h"
-				>
-			</File>
-			<File
-				RelativePath=".\util.h"
 				>
 			</File>
 		</Filter>

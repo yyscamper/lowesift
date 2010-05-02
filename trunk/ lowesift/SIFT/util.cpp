@@ -1,10 +1,10 @@
 
 #include "util.h"
 
- float GetVal32f(const IplImage* img, int x, int y)
+ /*inline float GetVal32f(const IplImage* img, int x, int y)
 {
 	return ((float*)(img->imageData + img->widthStep*x))[y];
-}
+}*/
 
  void Setval32f(IplImage* img, int x, int y, float val)
 {
