@@ -9,11 +9,26 @@ void SaveImage(IplImage* img);
 
 int main()
 {
-	char* imgNameList[3];
-	imgNameList[0] = "food1.jpg";
-	imgNameList[1] = "food2.jpg";
-	imgNameList[2] = "food3.jpg";
-	GetBatchSiftFeature(imgNameList, 3);
+	char* imgNameList[10];
+
+	/*imgNameList[0] = "haibao1.jpg";
+	imgNameList[1] = "haibao2.jpg";
+	imgNameList[2] = "haibao3.jpg";*/
+
+	/*imgNameList[0] = "fuwa1.jpg";
+	imgNameList[1] = "fuwa2.jpg";
+	imgNameList[2] = "fuwa3.jpg";*/
+
+	/*imgNameList[0] = "book1.jpg";
+	imgNameList[1] = "book2.jpg";
+	imgNameList[2] = "book3.jpg";
+	imgNameList[3] = "book4.jpg";*/
+
+	imgNameList[0] = "3611.jpg";
+	imgNameList[1] = "3612.jpg";
+	imgNameList[2] = "3613.jpg";
+	imgNameList[3] = "3614.jpg";
+	GetBatchSiftFeature(imgNameList, 4);
 	return 0;
 }
 
@@ -22,8 +37,8 @@ void GetBatchSiftFeature(char** imgNameList, int num)
 	IplImage** siftImgArr = (IplImage**)calloc(num, sizeof(IplImage*));
 	assert(siftImgArr != NULL);
 	IplImage* img;
-	SiftToolbox sift;
 	for(int i=0; i<num; i++){
+		SiftToolbox sift;
 		img = cvLoadImage(imgNameList[i], CV_LOAD_IMAGE_COLOR);
 		if(img == NULL){
 			printf("\nError: failed to load image: \"%s\"", imgNameList[i]);

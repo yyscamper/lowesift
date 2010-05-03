@@ -58,15 +58,16 @@ private:
 	bool	BuildDogPyr();
 	void	FindExtremePoint();
 	bool	IsExtrema(const int octave, const int scale, const int x, const int y) const;
-	bool	IsRemovableForLowContrast(int ocatve, int scale, int x, int y) const;
-	bool	IsRemovableForEdge(IplImage* img, int x, int y) const;
-	void	GetGradMagOri(const IplImage* img, const int x, const int y, double* mag, double* ori) const;
+	inline bool	IsRemovableForLowContrast(int ocatve, int scale, int x, int y) const;
+	inline bool	IsRemovableForEdge(IplImage* img, int x, int y) const;
+	inline void	GetGradMagOri(const IplImage* img, const int x, const int y, double* mag, double* ori) const;
 	void	OrientationAssignment();
-	void	CalcDormOri(SiftKeypoint_t& key);
-	double* CreateOriHist(const IplImage* img, const int x, const int y, const double sigma);
+	inline void	CalcDormOri(SiftKeypoint_t& key);
+	inline double* CreateOriHist(const IplImage* img, const int x, const int y, const double sigma);
+	inline void	SmoothHist(double* hist, int numOfBins);
 
-	CvMat*	GetDrivate_1(int octave, int scale, int x, int y) const;
-	CvMat*	GetDrivate_2(int octave, int scale, int x, int y) const;
+	inline CvMat*	GetDrivate_1(int octave, int scale, int x, int y) const;
+	inline CvMat*	GetDrivate_2(int octave, int scale, int x, int y) const;
 
 
 	inline float GetVal32f(const IplImage* img, int x, int y) const;
