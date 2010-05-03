@@ -10,12 +10,12 @@ SiftToolbox::SiftToolbox()
 {
 	m_param.numOfOctave = 0;
 	m_param.topPyrSize = 16;
-	m_param.isPriorDouble = true;
+	m_param.isPriorDouble = false;
 	m_param.nearMaxRatio = 0.8;
 	m_param.numOfHistBins = 36;
 	m_param.numOfScalePerOctave = 3;
 	m_param.sigmaOfOriAssign = 1.5;
-	m_param.sigmaOfInitGaussPyr = 1.6;
+	m_param.sigmaOfInitGaussPyr = 1.0;
 	m_param.sigmaOfPriorDouble = 1.6;
 	m_param.ratioOfEdge = 10;
 	m_param.radiusOfOriHistWnd = cvRound(m_param.sigmaOfOriAssign * 3);
@@ -78,17 +78,16 @@ bool SiftToolbox::BuildDogPyr()
 	IplImage*** gaussPyr;
 	int gaussScaleNum = m_param.numOfScalePerOctave + 3;
 	int dogScaleNum = gaussScaleNum - 1;
-	double* pSigmaArry = NULL;
 	double sigma = 0;
 
 	m_param.numOfOctave = cvRound((log((double)min(m_pyrBaseImage->width, m_pyrBaseImage->height)) 
 		- log((double)m_param.topPyrSize))/log(2.0));
 
+	//allocate memory for the pyramid
 	gaussPyr = (IplImage***)calloc(m_param.numOfOctave, sizeof(IplImage**));
 	assert(gaussPyr != NULL);
 	m_dogPyr = (IplImage***)calloc(m_param.numOfOctave, sizeof(IplImage**));
 	assert(m_dogPyr != NULL);
-
 	for(int i=0; i<m_param.numOfOctave; i++){
 		gaussPyr[i] = (IplImage**)calloc(gaussScaleNum, sizeof(IplImage*));
 		assert(gaussPyr[i] != NULL);
@@ -97,15 +96,19 @@ bool SiftToolbox::BuildDogPyr()
 	}
 	m_pSigmaVal = (double*)calloc(dogScaleNum, sizeof(double));
 	assert(m_pSigmaVal != NULL);
-
+	
+	//calculate the sigma for each scale
 	double k = pow(2.0, 1.0/m_param.numOfScalePerOctave);
 	m_pSigmaVal[0] = m_param.sigmaOfInitGaussPyr;
 	for(int i=1; i<dogScaleNum; i++){
 		m_pSigmaVal[i] = m_pSigmaVal[i-1]*k;
 	}
+
+	//build the pyramid
 	gaussPyr[0][0] = cvCreateImage(cvGetSize(m_pyrBaseImage), m_pyrBaseImage->depth, m_pyrBaseImage->nChannels);
 	gaussPyr[0][0] = cvCloneImage(m_pyrBaseImage);
 	for(int octave = 0; octave < m_param.numOfOctave; octave++){
+		//the image size of current octave
 		CvSize currOctaveSize;
 		if(octave == 0){
 			currOctaveSize = cvGetSize(gaussPyr[0][0]);
@@ -139,8 +142,6 @@ bool SiftToolbox::BuildDogPyr()
 	//		ShowImage(m_dogPyr[octave][scale]);
 	//	}
 	//}
-
-	free(pSigmaArry);
 	for(int i=0; i<m_param.numOfOctave; i++){
 		for(int j=0; j<m_param.numOfScalePerOctave+3; j++){
 			cvReleaseImage(&gaussPyr[i][j]);
@@ -254,7 +255,7 @@ CvMat* SiftToolbox::GetDrivate_2(int octave, int scale, int x, int y) const
 	return mat;
 }
 
-bool SiftToolbox::IsRemovableForLowContrast(int octave, int scale, int x, int y) const
+inline bool SiftToolbox::IsRemovableForLowContrast(int octave, int scale, int x, int y) const
 {
 	//printf("\nOct: %d, Scale: %d, x: %d, y: %d", octave, scale, x, y);
 	CvMat* D1 = GetDrivate_1(octave, scale, x, y);
@@ -305,13 +306,13 @@ bool SiftToolbox::IsRemovableForLowContrast(int octave, int scale, int x, int y)
 	cvReleaseMat(&X);
 	cvReleaseMat(&temp);
 
-	if(abs(Dx) <= m_param.thresholdOfKeypointContrast){
+	if(abs(Dx) <= m_param.thresholdOfKeypointContrast/m_param.numOfScalePerOctave){
 		return true;
 	}
 	return false;
 }
 
-bool SiftToolbox::IsRemovableForEdge(IplImage* img, int x, int y) const
+inline bool SiftToolbox::IsRemovableForEdge(IplImage* img, int x, int y) const
 {
 	double Dxx = GetVal32f(img, x, y+1) + GetVal32f(img, x, y-1) - 2*GetVal32f(img, x, y);
 	double Dyy = GetVal32f(img, x-1, y) + GetVal32f(img, x+1, y) - 2*GetVal32f(img, x, y);
@@ -337,9 +338,11 @@ void SiftToolbox::OrientationAssignment()
 	}
 }
 
-void SiftToolbox::CalcDormOri(SiftKeypoint_t& key)
+inline void SiftToolbox::CalcDormOri(SiftKeypoint_t& key)
 {
 	double* hist = CreateOriHist(m_dogPyr[key.octave][key.scale], key.pos.x, key.pos.y, m_pSigmaVal[key.scale]);	
+	SmoothHist(hist, m_param.numOfHistBins);
+
 	double max = hist[0];
 	int maxCnt = 0;
 	int maxIndex = 0;
@@ -371,7 +374,7 @@ void SiftToolbox::CalcDormOri(SiftKeypoint_t& key)
 	}
 }
 
-double* SiftToolbox::CreateOriHist(const IplImage* img, const int x, const int y, const double sigma)
+inline double* SiftToolbox::CreateOriHist(const IplImage* img, const int x, const int y, const double sigma)
 {
 	double den1, den2, weight, *hist, mag, ori;
 	int radius = m_param.radiusOfOriHistWnd;
@@ -390,7 +393,27 @@ double* SiftToolbox::CreateOriHist(const IplImage* img, const int x, const int y
 	return hist;
 }
 
-void SiftToolbox::GetGradMagOri(const IplImage* img, const int x, const int y, double* mag, double* ori) const
+inline void SiftToolbox::SmoothHist(double* hist, int numOfBins)
+{
+	double pre = hist[0], temp = 0;
+	/*printf("\nBefore smooth hist: \n");
+	for(int i=0; i<numOfBins; i++){
+		printf("%f, ", hist[i]);
+	}*/
+	hist[0] = 0.75*hist[0] + 0.25*hist[1];
+	for(int i=1; i<numOfBins-1; i++){
+		temp = hist[i];
+		hist[i] = 0.6*hist[i] + 0.2*pre + 0.2*hist[i+1]; 
+		pre = temp;
+	}
+	hist[numOfBins-1] = 0.75*hist[numOfBins-1] + 0.25*hist[numOfBins-2];
+	/*printf("\nAfter smooth hist: \n");
+	for(int i=0; i<numOfBins; i++){
+		printf("%f, ", hist[i]);
+	}*/
+}
+
+inline void SiftToolbox::GetGradMagOri(const IplImage* img, const int x, const int y, double* mag, double* ori) const
 {
 
 	if(x+1 >= img->width || y+1 >= img->height || x-1 <0 || y-1 < 0){
@@ -409,7 +432,7 @@ IplImage* SiftToolbox::PlotKeypoint(int type)
 {
 	IplImage* img = cvCreateImage(cvGetSize(m_pyrBaseImage), m_pyrBaseImage->depth, m_pyrBaseImage->nChannels);
 	img = cvCloneImage(m_originImage);
-	int	maxMagLen = min(img->width, img->height)/2;
+	int	maxMagLen = min(img->width, img->height)/4;
 	CvPoint	startPoint;
 	double adjustVal = 0.0;
 	int	axesLength = 0;
