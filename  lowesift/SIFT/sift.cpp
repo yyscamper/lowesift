@@ -12,7 +12,7 @@ SiftToolbox::SiftToolbox()
 	m_param.topPyrSize = 16;
 	m_param.isPriorDouble = false;
 	m_param.nearMaxRatio = 0.8;
-	m_param.numOfHistBins = 36;
+	m_param.numOfHistBinsOfDormOri = 36;
 	m_param.numOfScalePerOctave = 3;
 	m_param.sigmaOfOriAssign = 1.5;
 	m_param.sigmaOfInitGaussPyr = 1.0;
@@ -22,6 +22,10 @@ SiftToolbox::SiftToolbox()
 	m_param.thresholdOfKeypointContrast = 0.03;
 	m_param.numOfMarginPixel = 5;
 	m_param.maxNumOfInterp = 4;
+	m_param.numOfDescriptorInRowOrCol = 4; //4*4 Descriptor
+	m_param.sizeOfEachDescriptorWnd = 4;
+	m_param.numOfMarginPixel = m_param.sizeOfEachDescriptorWnd*m_param.numOfDescriptorInRowOrCol/2 + 1;
+	m_param.numOfDescirptorOri = 8;
 
 	m_dogPyr = NULL;
 	m_pSigmaVal = NULL;
@@ -42,6 +46,7 @@ IplImage* SiftToolbox::Process(IplImage* image)
 	BuildDogPyr();
 	FindExtremePoint();
 	OrientationAssignment();
+	DescriptorRepresentation();
 	return NULL;
 }
 
@@ -341,13 +346,13 @@ void SiftToolbox::OrientationAssignment()
 inline void SiftToolbox::CalcDormOri(SiftKeypoint_t& key)
 {
 	double* hist = CreateOriHist(m_dogPyr[key.octave][key.scale], key.pos.x, key.pos.y, m_pSigmaVal[key.scale]);	
-	SmoothHist(hist, m_param.numOfHistBins);
+	SmoothHist(hist, m_param.numOfHistBinsOfDormOri);
 
 	double max = hist[0];
 	int maxCnt = 0;
 	int maxIndex = 0;
 	//Find the max one
-	for(int i=1; i<m_param.numOfHistBins; i++){
+	for(int i=1; i<m_param.numOfHistBinsOfDormOri; i++){
 		if(hist[i] > max){
 			max = hist[i];
 			maxIndex = i;
@@ -362,7 +367,7 @@ inline void SiftToolbox::CalcDormOri(SiftKeypoint_t& key)
 
 	//Find all of the value that near the max, add the assist keypoint
 	double threshold = max*m_param.nearMaxRatio;
-	for(int i=0; i < m_param.numOfHistBins; i++){
+	for(int i=0; i < m_param.numOfHistBinsOfDormOri; i++){
 		if(i != maxIndex && hist[i] >= threshold){
 			SiftKeypoint_t *pAssistKey = (SiftKeypoint_t*)calloc(1, sizeof(SiftKeypoint_t));
 			memcpy(pAssistKey, &key, sizeof(SiftKeypoint_t));
@@ -381,12 +386,12 @@ inline double* SiftToolbox::CreateOriHist(const IplImage* img, const int x, cons
 	int binIndex = 0;
 	den1 = 2*sigma*sigma;
 	den2 = sqrt(2*CV_PI)*sigma;
-	hist = (double*)calloc(m_param.numOfHistBins, sizeof(double));
+	hist = (double*)calloc(m_param.numOfHistBinsOfDormOri, sizeof(double));
 	for(int i=-radius; i<=radius; i++){
 		for(int j=-radius; j<=radius; j++){
 			GetGradMagOri(img, x+i, y+j,&mag, &ori);
 			weight = exp((i*i + j*j)/den1)/den2;
-			binIndex = cvRound(ori*m_param.numOfHistBins/(CV_PI*2));
+			binIndex = cvRound(ori*m_param.numOfHistBinsOfDormOri/(CV_PI*2));
 			hist[binIndex] += weight*mag;
 		}
 	}
@@ -411,6 +416,103 @@ inline void SiftToolbox::SmoothHist(double* hist, int numOfBins)
 	for(int i=0; i<numOfBins; i++){
 		printf("%f, ", hist[i]);
 	}*/
+}
+
+void SiftToolbox::DescriptorRepresentation(){
+	list<SiftKeypoint_t>::iterator pCurrKey = m_keyPointPool.begin();
+	for(; pCurrKey != m_keyPointPool.end(); pCurrKey++){
+		GetDescriptor(*pCurrKey);
+	}
+}
+
+void SiftToolbox::BuildGuassWndOfDscrp()
+{
+	int wndSize = m_param.numOfDescriptorInRowOrCol*m_param.sizeOfEachDescriptorWnd;
+	double sigma, den1,den2;
+	m_gaussWndOfDscp = (CvMat**)calloc(m_param.numOfScalePerOctave+2, sizeof(CvMat**));
+	for(int i=0; i<m_param.numOfScalePerOctave+2; i++){
+		m_gaussWndOfDscp[i] = cvCreateMat(wndSize, wndSize, CV_32FC1);
+		sigma = wndSize/2;
+		den1 = sqrt(2*CV_PI)*sigma;
+		den2 = -2*sigma*sigma;
+		for(int x= -wndSize; x<wndSize; x++){
+			for(int y=-wndSize; y<wndSize; y++){
+				cvmSet(m_gaussWndOfDscp[i], x, y, exp((x*x+y*y)/den2)/den1);
+			}
+		}
+	}
+}
+
+inline void SiftToolbox::GetDescriptor(SiftKeypoint_t& key)
+{
+	int wndSize = m_param.sizeOfEachDescriptorWnd;
+	CvPoint cord;
+	key.pDescriptor = (double*)calloc(m_param.numOfDescriptorInRowOrCol*m_param.numOfDescriptorInRowOrCol
+		*m_param.numOfDescirptorOri, sizeof(double));
+	assert(key.pDescriptor != NULL);
+	int offset = 0;
+	for(int i=-m_param.numOfDescriptorInRowOrCol; i< m_param.numOfDescriptorInRowOrCol; i++){
+		for(int j=-m_param.numOfDescriptorInRowOrCol; j< m_param.numOfDescriptorInRowOrCol; j++){
+			cord.x = key.pos.x + i*m_param.sizeOfEachDescriptorWnd;
+			cord.y = key.pos.y + j*m_param.sizeOfEachDescriptorWnd;
+			GetDscrpWndVec(key.octave, key.scale, cord, m_param.sizeOfEachDescriptorWnd,
+				key.pos, key.pDescriptor+offset);
+			offset += m_param.numOfDescirptorOri;
+		}
+	}
+}
+
+inline void SiftToolbox::GetDscrpWndVec(int octave, int scale, CvPoint pt, int wndSize, CvPoint center, double* dst)
+{
+	double mag, ori, maxMag = 0;
+	int numOfOriBins = m_param.numOfDescirptorOri;
+	int maxMagPos = 0;
+	IplImage* img = m_dogPyr[octave][scale];
+	CvMat* gaussWnd = m_gaussWndOfDscp[scale];
+	for(int x= pt.x; x < pt.x+wndSize; x++){
+		for(int y=pt.y; y<pt.y+wndSize; y++){
+			GetGradMagOri(img, x, y, &mag, &ori);
+			mag *= cvmGet(gaussWnd, x-center.x+gaussWnd->width/2, y-center.y+gaussWnd->height/2);
+			if(mag > maxMag){
+				maxMagPos = x-pt.x;
+			}
+			dst[cvRound(ori*numOfOriBins/CV_PI)] += mag;
+		}
+	}
+	ShiftOriHist(dst, numOfOriBins, maxMagPos);
+	ThresholdAndNormalizeDsrp(dst, m_param.numOfDescirptorOri);
+}
+
+inline double* SiftToolbox::ShiftOriHist(double* hist, int num, int pos)
+{
+	if(pos == 0){
+		return hist;
+	}else{
+		double* cpyHist = (double*)calloc(num, sizeof(double));
+		memcpy(cpyHist, hist, num*sizeof(double));
+		for(int i=pos; i<num; i++){
+			hist[i-pos] = cpyHist[i];
+		}
+		for(int i=0; i<pos; i++){
+			hist[i+num-pos] = cpyHist[i];
+		}
+		free(cpyHist);
+	}
+	
+	return hist;
+}
+
+inline void SiftToolbox::ThresholdAndNormalizeDsrp(double* data, int num)
+{
+	double sum = 0.0;
+	for(int i=0; i<num; i++){
+		data[i] = data[i] > 0.2 ? 0.2: data[i];
+		sum += data[i]*data[i];
+	}
+	double temp = 1/sqrt(sum);
+	for(int i=0; i<num; i++){
+		data[i] = data[i]*temp;
+	}
 }
 
 inline void SiftToolbox::GetGradMagOri(const IplImage* img, const int x, const int y, double* mag, double* ori) const
@@ -466,6 +568,98 @@ IplImage* SiftToolbox::PlotKeypoint(int type)
 		}
 	}
 	return img;
+}
+
+IplImage* SiftToolbox::GetMatchImage(SiftToolbox& another)
+{
+	if(this->GetDescriptorVectorDim() != another.GetDescriptorVectorDim()){
+		return NULL;
+	}
+
+	IplImage* img1, *img2;
+	img1 = this->m_originImage;
+	img2 = another.m_originImage;
+	list<SiftKeypoint_t>& keyPool1 = this->m_keyPointPool;
+	list<SiftKeypoint_t>& keyPool2 = another.m_keyPointPool;
+
+	int width = max(img1->width, img2->width);
+	int height = max(img1->width, img2->width);
+	int gap = 20;
+
+	IplImage* matchImg = cvCreateImage(cvSize(width*2+gap, height), CV_32FC1, 1);
+	for(int i=0; i<img1->width; i++){
+		for(int j=0; j<img1->height; j++){
+			Setval32f(matchImg, i, j, GetVal32f(img1, i, j));
+		}
+	}
+	for(int i=0; i<img2->width; i++){
+		for(int j=0; j<img2->height; j++){
+			Setval32f(matchImg, i+width+gap, j, GetVal32f(img2, i, j));
+		}
+	}
+
+	
+	int numOfMatchFind = 100;
+	if(numOfMatchFind > keyPool1.size()){
+		numOfMatchFind = keyPool1.size();
+	}
+	SiftKeypoint_t *pMatchKey = NULL;		
+	double adjust1, adjust2;
+	CvPoint p1, p2;
+	list<SiftKeypoint_t>::iterator pCurrKey = keyPool1.begin();
+	for(int i=0; i<numOfMatchFind; i++, pCurrKey++){
+		if(FindMatchPoint(*pCurrKey, keyPool2, GetDescriptorVectorDim(), pMatchKey)){
+			if(m_param.isPriorDouble){
+				adjust1 =  pow(2.0, (double)pCurrKey->octave-1);
+			}else{
+				adjust1 =  pow(2.0, (double)pCurrKey->octave);
+			}
+
+			if(another.m_param.isPriorDouble){
+				adjust2 =  pow(2.0, (double)pCurrKey->octave-1);
+			}else{
+				adjust2 =  pow(2.0, (double)pCurrKey->octave);
+			}
+			
+			p1.x = cvRound(pCurrKey->pos.x * adjust1);
+			p1.y = cvRound(pCurrKey->pos.y * adjust1);
+			p2.x = cvRound(pMatchKey->pos.x * adjust2) + width + gap;
+			p2.y = cvRound(pMatchKey->pos.y * adjust2);
+			cvLine(matchImg, p1, p2, CV_RGB(255,0,0), 1, 8, 0);
+		}
+	}
+
+	return matchImg;
+}
+int SiftToolbox::GetDescriptorVectorDim()
+{
+	return m_param.numOfDescriptorInRowOrCol * m_param.numOfDescriptorInRowOrCol * m_param.numOfDescirptorOri;
+}
+
+inline bool SiftToolbox::FindMatchPoint(SiftKeypoint_t& srcKey, list<SiftKeypoint_t>& srcPool, int dim, SiftKeypoint_t* pMatchKey)
+{
+	double firstMin=1000000.0, secMin=1000000.0;
+	double euDis = 0.0;
+	double sum = 0.0;
+
+	list<SiftKeypoint_t>::iterator pCurrKey = srcPool.begin();
+	for(; pCurrKey != m_keyPointPool.end(); pCurrKey++){
+		for(int i=0; i< dim; i++){
+			sum += (srcKey.pDescriptor[i] - pCurrKey->pDescriptor[i]) 
+				* (srcKey.pDescriptor[i] - pCurrKey->pDescriptor[i]);
+		}
+		euDis = sum;//sqrt(sum);
+		if(euDis < firstMin){
+			firstMin = euDis;
+			pMatchKey = &(*pCurrKey);
+		}else if(euDis < secMin){
+			secMin = euDis;
+		}
+	}
+	if(firstMin/secMin < 0.01){
+		return true;
+	}	
+	return false;
 }
 
 inline float SiftToolbox::GetVal32f(const IplImage* img, int x, int y) const
