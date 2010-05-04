@@ -6,7 +6,7 @@
 using namespace std;
 void GetBatchSiftFeature(char** imgNameList, int num);
 void SaveImage(IplImage* img);
-
+void MatchTest(char** imgNameList);
 int main()
 {
 	char* imgNameList[10];
@@ -28,7 +28,9 @@ int main()
 	imgNameList[1] = "3612.jpg";
 	imgNameList[2] = "3613.jpg";
 	imgNameList[3] = "3614.jpg";
-	GetBatchSiftFeature(imgNameList, 4);
+
+	//GetBatchSiftFeature(imgNameList, 4);
+	MatchTest(imgNameList);
 	return 0;
 }
 
@@ -76,4 +78,37 @@ void SaveImage(IplImage* img)
 		system("pause");
 		exit(0);
 	}
+}
+
+void MatchTest(char** imgNameList)
+{
+	SiftToolbox sift1, sift2;
+	IplImage *img1, *img2;
+	//process the first image
+	img1 = cvLoadImage(imgNameList[0], CV_LOAD_IMAGE_COLOR);
+	if(img1 == NULL){
+		printf("\nError: failed to load image: \"%s\"", imgNameList[0]);
+		return;
+	}
+	sift1.Process(img1);
+
+	//process the second image
+	img2 = cvLoadImage(imgNameList[1], CV_LOAD_IMAGE_COLOR);
+	if(img2 == NULL){
+		printf("\nError: failed to load image: \"%s\"", imgNameList[1]);
+		return;
+	}
+	sift2.Process(img2);
+
+	IplImage* matchImage = sift1.GetMatchImage(sift2);
+	
+	char wndName[] = "SIFT Match Image";
+	cvNamedWindow(wndName);
+	cvShowImage(wndName, matchImage);
+	cvWaitKey(0);
+	cvDestroyAllWindows();
+	cvReleaseImage(&img1);
+	cvReleaseImage(&img2);
+	cvReleaseImage(&matchImage);
+	
 }

@@ -36,7 +36,22 @@ SiftToolbox::SiftToolbox()
 
 SiftToolbox::~SiftToolbox()
 {
+	free(m_pSigmaVal);
+	free(&m_pyrBaseImage);
+	for(int i=0; i<m_param.numOfOctave; i++){
+		for(int j=0; j<m_param.numOfScalePerOctave+2; j++){
+			cvReleaseImage(&m_dogPyr[i][j]);
+		}
+		free(m_dogPyr[i]);
+	}
+	free(m_dogPyr);
 
+	list<SiftKeypoint_t>::size_type total = m_keyPointPool.size(), i = 0;
+	list<SiftKeypoint_t>::iterator pCurrKey = m_keyPointPool.begin();
+	for(; i<total; pCurrKey++, i++){
+		free(pCurrKey->pDescriptor);
+		//free(pCurrKey);
+	}
 }
 
 IplImage* SiftToolbox::Process(IplImage* image)
@@ -377,6 +392,8 @@ inline void SiftToolbox::CalcDormOri(SiftKeypoint_t& key)
 			m_keyPointPool.push_back(*pAssistKey);
 		}
 	}
+
+	free(hist);
 }
 
 inline double* SiftToolbox::CreateOriHist(const IplImage* img, const int x, const int y, const double sigma)
@@ -420,7 +437,11 @@ inline void SiftToolbox::SmoothHist(double* hist, int numOfBins)
 
 void SiftToolbox::DescriptorRepresentation(){
 	list<SiftKeypoint_t>::iterator pCurrKey = m_keyPointPool.begin();
+	//BuildGuassWndOfDscrp();
+	int cnt = 0;
 	for(; pCurrKey != m_keyPointPool.end(); pCurrKey++){
+		printf("\n%d: key.octave=%d, key.scale=%d, key.x=%d, key.y=%d", ++cnt, pCurrKey->octave, pCurrKey->scale, pCurrKey->pos.x,
+			pCurrKey->pos.y);
 		GetDescriptor(*pCurrKey);
 	}
 }
@@ -435,9 +456,9 @@ void SiftToolbox::BuildGuassWndOfDscrp()
 		sigma = wndSize/2;
 		den1 = sqrt(2*CV_PI)*sigma;
 		den2 = -2*sigma*sigma;
-		for(int x= -wndSize; x<wndSize; x++){
-			for(int y=-wndSize; y<wndSize; y++){
-				cvmSet(m_gaussWndOfDscp[i], x, y, exp((x*x+y*y)/den2)/den1);
+		for(int x= -wndSize/2; x<wndSize/2; x++){
+			for(int y=-wndSize/2; y<wndSize/2; y++){
+				cvmSet(m_gaussWndOfDscp[i], x+wndSize/2, y+wndSize/2, exp((x*x+y*y)/den2)/den1);
 			}
 		}
 	}
@@ -456,51 +477,66 @@ inline void SiftToolbox::GetDescriptor(SiftKeypoint_t& key)
 			cord.x = key.pos.x + i*m_param.sizeOfEachDescriptorWnd;
 			cord.y = key.pos.y + j*m_param.sizeOfEachDescriptorWnd;
 			GetDscrpWndVec(key.octave, key.scale, cord, m_param.sizeOfEachDescriptorWnd,
-				key.pos, key.pDescriptor+offset);
+				key.pos, key.ori, key.pDescriptor+offset);
 			offset += m_param.numOfDescirptorOri;
 		}
 	}
 }
 
-inline void SiftToolbox::GetDscrpWndVec(int octave, int scale, CvPoint pt, int wndSize, CvPoint center, double* dst)
+inline void SiftToolbox::GetDscrpWndVec(int octave, int scale, CvPoint pt, int wndSize, CvPoint center, double oriOfKey, double* dst)
 {
 	double mag, ori, maxMag = 0;
 	int numOfOriBins = m_param.numOfDescirptorOri;
 	int maxMagPos = 0;
 	IplImage* img = m_dogPyr[octave][scale];
-	CvMat* gaussWnd = m_gaussWndOfDscp[scale];
+	//CvMat* gaussWnd = m_gaussWndOfDscp[scale];
+	int rotX, rotY; //the rotated coords;
+	double len;
+
+	double sigma = wndSize/2;
+	double den1 = sqrt(2*CV_PI)*sigma;
+	double den2 = -2*sigma*sigma;
 	for(int x= pt.x; x < pt.x+wndSize; x++){
 		for(int y=pt.y; y<pt.y+wndSize; y++){
 			GetGradMagOri(img, x, y, &mag, &ori);
-			mag *= cvmGet(gaussWnd, x-center.x+gaussWnd->width/2, y-center.y+gaussWnd->height/2);
+
+			len = sqrt((double)((x-center.x) * (x-center.x) + (y-center.y) * (y-center.y)));
+			rotX = cvRound(len*cos(len) + 0.5);
+			rotY = cvRound(len*sin(len) + 0.5);
+			//mag *= cvmGet(gaussWnd, rotX+gaussWnd->width/2, rotY+gaussWnd->height/2);
+			mag *= exp((rotX*rotX+rotY*rotY)/den2)/den1;
 			if(mag > maxMag){
 				maxMagPos = x-pt.x;
+			}
+			ori = ori-oriOfKey;
+			if(ori < 0){
+				ori += 2*CV_PI;
 			}
 			dst[cvRound(ori*numOfOriBins/CV_PI)] += mag;
 		}
 	}
-	ShiftOriHist(dst, numOfOriBins, maxMagPos);
+	//ShiftOriHist(dst, numOfOriBins, maxMagPos);
 	ThresholdAndNormalizeDsrp(dst, m_param.numOfDescirptorOri);
 }
 
-inline double* SiftToolbox::ShiftOriHist(double* hist, int num, int pos)
-{
-	if(pos == 0){
-		return hist;
-	}else{
-		double* cpyHist = (double*)calloc(num, sizeof(double));
-		memcpy(cpyHist, hist, num*sizeof(double));
-		for(int i=pos; i<num; i++){
-			hist[i-pos] = cpyHist[i];
-		}
-		for(int i=0; i<pos; i++){
-			hist[i+num-pos] = cpyHist[i];
-		}
-		free(cpyHist);
-	}
-	
-	return hist;
-}
+//inline double* SiftToolbox::ShiftOriHist(double* hist, int num, int pos)
+//{
+//	if(pos == 0){
+//		return hist;
+//	}else{
+//		double* cpyHist = (double*)calloc(num, sizeof(double));
+//		memcpy(cpyHist, hist, num*sizeof(double));
+//		for(int i=pos; i<num; i++){
+//			hist[i-pos] = cpyHist[i];
+//		}
+//		for(int i=0; i<pos; i++){
+//			hist[i+num-pos] = cpyHist[i];
+//		}
+//		free(cpyHist);
+//	}
+//	
+//	return hist;
+//}
 
 inline void SiftToolbox::ThresholdAndNormalizeDsrp(double* data, int num)
 {
@@ -657,6 +693,7 @@ inline bool SiftToolbox::FindMatchPoint(SiftKeypoint_t& srcKey, list<SiftKeypoin
 		}
 	}
 	if(firstMin/secMin < 0.01){
+		printf("\n!!!!!!!!!! Find a match point.");
 		return true;
 	}	
 	return false;
