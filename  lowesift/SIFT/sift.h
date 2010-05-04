@@ -70,7 +70,7 @@ private:
 	void BuildGuassWndOfDscrp();
 	void	DescriptorRepresentation();
 	inline void GetDescriptor(SiftKeypoint_t& key);
-	inline void GetDscrpWndVec(int octave, int scale, CvPoint pt, int wndSize, CvPoint center, double* dst);
+	inline void GetDscrpWndVec(int octave, int scale, CvPoint pt, int wndSize, CvPoint center, double oriOfKey, double* dst);
 	inline double* ShiftOriHist(double* hist, int num, int pos);
 	inline void ThresholdAndNormalizeDsrp(double* data, int num);
 
