@@ -1,6 +1,14 @@
 
+/**
+ * SIFT特征点的提取
+ * 作者：袁宇
+ * 时间：2010-05-01
+ * 参考文献：
+	[1] David G. Lowe, Distinctive Image Features form Scale-Invariant Keypoints, International Journal of Computer Vision, 2004
+	[2] David G. Lowe, Object Recognition form Local Scale-Invariant Features, Proc. Of the International Conference on Computer Vision, Corfu, 1999
+	[3]赵辉, SIFT特征特征匹配技术讲义
+ */
 #include "sift.h"
-//#include "util.h"
 #include "const.h"
 #include "assert.h"
 #include <stdlib.h>
@@ -15,11 +23,11 @@ SiftToolbox::SiftToolbox()
 	m_param.numOfHistBinsOfDormOri = 36;
 	m_param.numOfScalePerOctave = 3;
 	m_param.sigmaOfOriAssign = 1.5;
-	m_param.sigmaOfInitGaussPyr = 1.0;
+	m_param.sigmaOfInitGaussPyr = 1.6;
 	m_param.sigmaOfPriorDouble = 1.6;
 	m_param.ratioOfEdge = 10;
 	m_param.radiusOfOriHistWnd = cvRound(m_param.sigmaOfOriAssign * 3);
-	m_param.thresholdOfKeypointContrast = 0.03;
+	m_param.thresholdOfKeypointContrast = 0.04;
 	m_param.numOfMarginPixel = 5;
 	m_param.maxNumOfInterp = 4;
 	m_param.numOfDescriptorInRowOrCol = 4; //4*4 Descriptor
@@ -36,22 +44,22 @@ SiftToolbox::SiftToolbox()
 
 SiftToolbox::~SiftToolbox()
 {
-	free(m_pSigmaVal);
-	free(&m_pyrBaseImage);
-	for(int i=0; i<m_param.numOfOctave; i++){
-		for(int j=0; j<m_param.numOfScalePerOctave+2; j++){
-			cvReleaseImage(&m_dogPyr[i][j]);
-		}
-		free(m_dogPyr[i]);
-	}
-	free(m_dogPyr);
+	//free(m_pSigmaVal);
+	//free(&m_pyrBaseImage);
+	//for(int i=0; i<m_param.numOfOctave; i++){
+	//	for(int j=0; j<m_param.numOfScalePerOctave+2; j++){
+	//		cvReleaseImage(&m_dogPyr[i][j]);
+	//	}
+	//	free(m_dogPyr[i]);
+	//}
+	//free(m_dogPyr);
 
-	list<SiftKeypoint_t>::size_type total = m_keyPointPool.size(), i = 0;
-	list<SiftKeypoint_t>::iterator pCurrKey = m_keyPointPool.begin();
-	for(; i<total; pCurrKey++, i++){
-		free(pCurrKey->pDescriptor);
-		//free(pCurrKey);
-	}
+	//list<SiftKeypoint_t>::size_type total = m_keyPointPool.size(), i = 0;
+	//list<SiftKeypoint_t>::iterator pCurrKey = m_keyPointPool.begin();
+	//for(; i<total; pCurrKey++, i++){
+	//	free(pCurrKey->pDescriptor);
+	//	//free(pCurrKey);
+	//}
 }
 
 IplImage* SiftToolbox::Process(IplImage* image)
@@ -61,7 +69,7 @@ IplImage* SiftToolbox::Process(IplImage* image)
 	BuildDogPyr();
 	FindExtremePoint();
 	OrientationAssignment();
-	DescriptorRepresentation();
+	//DescriptorRepresentation();
 	return NULL;
 }
 
@@ -181,7 +189,7 @@ void SiftToolbox::FindExtremePoint()
 				for(int y = 4; y< (scaleSize.height- m_param.numOfMarginPixel); y++){
 					//printf("\nOctave = %d, Scale = %d, x = %d, y = %d. ", i, j, x, y);
 					if(IsExtrema(i,j,x,y) 
-						&& !IsRemovableForLowContrast(i,j, x, y)
+						&& !IsRemovableForLowContrast(i,j, x, y)//){
 						&& !IsRemovableForEdge(m_dogPyr[i][j], x, y)){
 						SiftKeypoint_t* pKeyPoint = new SiftKeypoint_t;
 						pKeyPoint->octave = i;
@@ -200,7 +208,6 @@ void SiftToolbox::FindExtremePoint()
 bool SiftToolbox::IsExtrema(const int octave, const int scale, const int x, const int y) const 
 {
 	float val = GetVal32f(m_dogPyr[octave][scale], x, y);
-	float val1 = GetVal32f(m_dogPyr[octave][scale], x-1, y);
 	if(val > 0){ //Check Max Value
 		for(int i = -1; i<=1; i++){
 			for(int j = -1; j<=1; j++){
@@ -393,7 +400,7 @@ inline void SiftToolbox::CalcDormOri(SiftKeypoint_t& key)
 		}
 	}
 
-	free(hist);
+	//free(hist);
 }
 
 inline double* SiftToolbox::CreateOriHist(const IplImage* img, const int x, const int y, const double sigma)
@@ -566,15 +573,29 @@ inline void SiftToolbox::GetGradMagOri(const IplImage* img, const int x, const i
 	*ori = atan2(Dyy, Dxx) + CV_PI; //Change the radius range [0, 2*pi]
 }
 
+bool comp(SiftKeypoint_t& key1, SiftKeypoint_t& key2)
+{
+	return key1.mag > key2.mag;
+}
+
 IplImage* SiftToolbox::PlotKeypoint(int type)
 {
+	m_keyPointPool.sort(comp);
 	IplImage* img = cvCreateImage(cvGetSize(m_pyrBaseImage), m_pyrBaseImage->depth, m_pyrBaseImage->nChannels);
 	img = cvCloneImage(m_originImage);
-	int	maxMagLen = min(img->width, img->height)/4;
+	int	maxMagLen = min(img->width, img->height)/8;
 	CvPoint	startPoint;
 	double adjustVal = 0.0;
 	int	axesLength = 0;
-	for(list<SiftKeypoint_t>::iterator pIter = m_keyPointPool.begin(); pIter != m_keyPointPool.end(); pIter++){
+	int plotTotal = m_keyPointPool.size();
+	int plotCnt = 0;
+	printf("\nTotal Keypoint: %d, Plotted Number: %d", m_keyPointPool.size(), plotTotal);
+	for(list<SiftKeypoint_t>::iterator pIter = m_keyPointPool.begin(); 
+		pIter != m_keyPointPool.end() && plotCnt < plotTotal; 
+		pIter++, plotCnt++){	
+		//if(pIter->mag < m_maxMag*0.1){
+		//	continue;
+		//}
 		if(m_param.isPriorDouble){
 			adjustVal =  pow(2.0, (double)pIter->octave-1);
 		}else{
@@ -583,6 +604,9 @@ IplImage* SiftToolbox::PlotKeypoint(int type)
 		startPoint.x = cvRound(pIter->pos.x * adjustVal);
 		startPoint.y = cvRound(pIter->pos.y * adjustVal);
 		axesLength = cvRound(pIter->mag * maxMagLen / m_maxMag);
+		int anchorLen = 6;
+		int anchorXoffset, anchorYoffset;
+		CvPoint p1, p2;
 		switch (type)
 		{
 		case SIFT_PLOT_DOT:
@@ -591,13 +615,23 @@ IplImage* SiftToolbox::PlotKeypoint(int type)
 			break;
 		case SIFT_PLOT_LINE:
 			CvPoint endPoint;
-			endPoint.x = pIter->pos.x + cvRound(cos(pIter->ori)* pIter->mag * maxMagLen / m_maxMag);
-			endPoint.y = pIter->pos.y + cvRound(sin(pIter->ori)* pIter->mag * maxMagLen / m_maxMag);
+			endPoint.x = startPoint.x + cvRound(cos(pIter->ori)* axesLength);
+			endPoint.y = startPoint.y + cvRound(sin(pIter->ori)* axesLength);
 			cvLine(img, startPoint, endPoint, CV_RGB(255,0,0), 1, 8, 0);
+
+			anchorXoffset = abs(anchorLen*sin(pIter->ori));
+			anchorYoffset = abs(anchorLen*cos(pIter->ori));
+			p1.x = startPoint.x - anchorXoffset;
+			p1.y = startPoint.y + anchorYoffset;
+			p2.x = startPoint.x + anchorXoffset;
+			p2.y = startPoint.y - anchorYoffset;
+			cvLine(img, p1, p2, CV_RGB(255,0,0), 1, 8, 0);
+
 			break;
 		case SIFT_PLOT_RECT:
 			maxMagLen = 10;
-			cvCircle(img, startPoint, cvRound(pIter->mag * maxMagLen / m_maxMag), CV_RGB(255, 0, 0), -1, 8, 0);
+			//cvCircle(img, startPoint, cvRound(pIter->mag * maxMagLen / m_maxMag), CV_RGB(255, 0, 0), -1, 8, 0);
+			cvCircle(img, startPoint, 4, CV_RGB(255, 0, 0), -1, 8, 0);
 			break;
 		default:
 			cvEllipse(img, startPoint, cvSize(axesLength, axesLength/4), pIter->ori*360/(2*CV_PI), 0, 360, CV_RGB(255,0,0), 1, 8, 0);
