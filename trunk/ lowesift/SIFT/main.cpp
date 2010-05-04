@@ -1,11 +1,21 @@
 
+/**
+ * SIFT特征点的提取
+ * 作者：袁宇
+ * 时间：2010-05-01
+ * 参考文献：
+	[1] David G. Lowe, Distinctive Image Features form Scale-Invariant Keypoints, International Journal of Computer Vision, 2004
+	[2] David G. Lowe, Object Recognition form Local Scale-Invariant Features, Proc. Of the International Conference on Computer Vision, Corfu, 1999
+	[3]赵辉, SIFT特征特征匹配技术讲义
+ */
+
 #include "sift.h"
 #include <time.h>
 #include <stdio.h>
 
 using namespace std;
 void GetBatchSiftFeature(char** imgNameList, int num);
-void SaveImage(IplImage* img);
+void SaveImage(IplImage* img, char* imgName);
 void MatchTest(char** imgNameList);
 int main()
 {
@@ -15,22 +25,47 @@ int main()
 	imgNameList[1] = "haibao2.jpg";
 	imgNameList[2] = "haibao3.jpg";*/
 
-	/*imgNameList[0] = "fuwa1.jpg";
-	imgNameList[1] = "fuwa2.jpg";
-	imgNameList[2] = "fuwa3.jpg";*/
+	//imgNameList[0] = "fuwa1.jpg";
+	//imgNameList[1] = "fuwa2.jpg";
+	//imgNameList[2] = "fuwa3.jpg";
+	//imgNameList[3] = "fuwa4.jpg";
+	//imgNameList[4] = "fuwa9.jpg";
 
 	/*imgNameList[0] = "book1.jpg";
 	imgNameList[1] = "book2.jpg";
 	imgNameList[2] = "book3.jpg";
-	imgNameList[3] = "book4.jpg";*/
+	imgNameList[3] = "book4.jpg";
+	imgNameList[4] = "book4.jpg";*/
 
-	imgNameList[0] = "3611.jpg";
+	//imgNameList[0] = "2book1.jpg";
+	//imgNameList[1] = "2book2.jpg";
+	//imgNameList[2] = "2book3.jpg";
+	//imgNameList[3] = "2book4.jpg";
+	//imgNameList[4] = "2book5.jpg";
+	//imgNameList[5] = "2book6.jpg";
+
+	/*imgNameList[0] = "3611.jpg";
 	imgNameList[1] = "3612.jpg";
 	imgNameList[2] = "3613.jpg";
 	imgNameList[3] = "3614.jpg";
+	imgNameList[4] = "3615.jpg";*/
 
-	//GetBatchSiftFeature(imgNameList, 4);
-	MatchTest(imgNameList);
+	//imgNameList[0] = "tattoo1.jpg";
+	//imgNameList[1] = "tattoo2.jpg";
+	//imgNameList[2] = "tattoo3.jpg";
+	//imgNameList[3] = "tattoo4.jpg";
+	//imgNameList[4] = "tattoo5.jpg";
+	//imgNameList[5] = "tattoo9.jpg";
+
+	
+	//imgNameList[0] = "food1.jpg";
+	//imgNameList[1] = "food2.jpg";
+	//imgNameList[2] = "food3.jpg";
+	//imgNameList[3] = "food4.jpg";
+
+	imgNameList[0] = "lena.jpg";
+	GetBatchSiftFeature(imgNameList,1);
+	//MatchTest(imgNameList);
 	return 0;
 }
 
@@ -47,7 +82,7 @@ void GetBatchSiftFeature(char** imgNameList, int num)
 			return;
 		}
 		sift.Process(img);
-		siftImgArr[i] = sift.PlotKeypoint(SIFT_PLOT_ECLLIPSE);
+		siftImgArr[i] = sift.PlotKeypoint(SIFT_PLOT_LINE);
 	}
 	
 	char wndName[] = "SIFT Feature 1";
@@ -57,6 +92,15 @@ void GetBatchSiftFeature(char** imgNameList, int num)
 		wndName[13]++;
 	}
 	cvWaitKey(0);
+	
+	char saveImgName[128];
+	strcpy(saveImgName, "1_");
+	for(int i=0; i<num; i++){
+		strcpy(saveImgName+2, imgNameList[i]);
+		SaveImage(siftImgArr[i], saveImgName);
+		saveImgName[0]++;
+	}
+
 	for(int i=0; i<num; i++){
 		cvReleaseImage(&siftImgArr[i]);
 	}
@@ -65,16 +109,16 @@ void GetBatchSiftFeature(char** imgNameList, int num)
 	cvDestroyAllWindows();
 }
 
-void SaveImage(IplImage* img)
+void SaveImage(IplImage* img, char* imgName)
 {
-	//Save the image
-	char saveImageName[128];
-	time_t now;
-	now = time(NULL);
-	struct tm *tmt = localtime(&now); 
-	strftime(saveImageName, 128, "%m%d.%H%M%S.jpg", tmt);
-	if(!cvSaveImage(saveImageName, img)){
-		printf("Error: Failed to save image.");
+	////Save the image
+	//char saveImageName[128];
+	//time_t now;
+	//now = time(NULL);
+	//struct tm *tmt = localtime(&now); 
+	//strftime(saveImageName, 128, "%m%d.%H%M%S.jpg", tmt);
+	if(!cvSaveImage(imgName, img)){
+		printf("Error: Failed to save image: %s", imgName);
 		system("pause");
 		exit(0);
 	}
