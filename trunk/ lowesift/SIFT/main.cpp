@@ -63,7 +63,7 @@ int main()
 	//imgNameList[2] = "food3.jpg";
 	//imgNameList[3] = "food4.jpg";
 
-	imgNameList[0] = "lena.jpg";
+	imgNameList[0] = "deer.jpg";
 	GetBatchSiftFeature(imgNameList,1);
 	//MatchTest(imgNameList);
 	return 0;
